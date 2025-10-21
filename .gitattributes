@@ -1,3 +1,82 @@
 # Auto detect text files and perform LF normalization
 * text=auto
-c:\Users\91969\OneDrive\Desktop\resume_parser_project\parser.py
+c:\Users\91969\OneDrive\Desktop\resume_parser_project\parser.
+import re
+import docx2txt
+import spacy
+import json
+
+nlp = spacy.load("en_core_web_sm")
+
+# -------- Functions --------
+def extract_text(file_path):
+    return docx2txt.process(file_path)
+
+def extract_email(text):
+    pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-z]{2,}"
+    return re.findall(pattern, text)
+
+def extract_phone(text):
+    pattern = r"(\+?\d[\d\-\s]{7,}\d)"
+    return re.findall(pattern, text)
+
+def extract_name(text):
+    lines = text.split("\n")
+    for line in lines:
+        line_clean = line.strip()
+        if line_clean and not any(word.lower() in line_clean.lower() for word in ["email", "phone", "skills", "experience", "education"]):
+            # Use spaCy to check if this line contains a person name
+            doc = nlp(line_clean)
+            for ent in doc.ents:
+                if ent.label_ == "PERSON":
+                    return ent.text
+            # fallback: return the line if spaCy fails
+            return line_clean
+    return "Not found"
+
+def extract_skills(text):
+    skills_list = ["Python", "Java", "C++", "SQL", "HTML", "CSS", "JavaScript", "React", "Node.js"]
+    found = [skill for skill in skills_list if skill.lower() in text.lower()]
+    return found
+
+def extract_section(text, section_name):
+    """Extract lines under a section until the next section"""
+    lines = text.split("\n")
+    section_lines = []
+    capture = False
+    for line in lines:
+        line_clean = line.strip()
+        if section_name.lower() in line_clean.lower():
+            capture = True
+            continue
+        if capture:
+            # Stop capturing if we hit another header
+            if line_clean.lower() in ["education", "experience", "skills"]:
+                break
+            if line_clean:  # only non-empty lines
+                section_lines.append(line_clean)
+    return section_lines
+
+# -------- Main --------
+if __name__ == "__main__":
+    file_path = r"C:\Users\91969\OneDrive\Desktop\resume_parser_project\sample_resume.docx"
+
+    text = extract_text(file_path)
+
+    result = {
+        "Name": extract_name(text),
+        "Email": extract_email(text),
+        "Phone": extract_phone(text),
+        "Skills": extract_skills(text),
+        "Education": extract_section(text, "Education"),
+        "Experience": extract_section(text, "Experience")
+    }
+
+    # Print to terminal
+    print(json.dumps(result, indent=2))
+
+    # Save to JSON
+    with open("output.json", "w", encoding="utf-8") as f:
+        json.dump(result, f, indent=2, ensure_ascii=False)
+
+    print("\n✅ Clean resume details saved to output.json")
